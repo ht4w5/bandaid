@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/netip"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -18,6 +19,7 @@ const (
 
 var (
 	ErrInvalidTarget = errors.New("invalid target")
+	ErrInvalidReason = errors.New("invalid reason")
 )
 
 type Report struct {
@@ -82,9 +84,17 @@ func (f *Finding) ReasonsStr() string {
 	return strings.Join(f.Reasons, ":")
 }
 
+var reasonRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
 func (f *Finding) Normalize() error {
 	if !f.Target.IsValid() {
 		return ErrInvalidTarget
+	}
+
+	for _, r := range f.Reasons {
+		if !reasonRe.MatchString(r) {
+			return fmt.Errorf("%w: %s", ErrInvalidReason, r)
+		}
 	}
 
 	f.Target = f.Target.Masked()
