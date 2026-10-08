@@ -3,9 +3,13 @@ package model
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"net/netip"
 	"slices"
+	"strings"
+
+	"go4.org/netipx"
 )
 
 const (
@@ -20,9 +24,35 @@ type Report struct {
 	Findings []Finding
 }
 
-func (r *Report) Normalize() error {
+func (r *Report) Exclude(set *netipx.IPSet) error {
+	newFindings := make([]Finding, 0, len(r.Findings))
+
 	for _, f := range r.Findings {
-		err := f.Normalize()
+		if set.OverlapsPrefix(f.Target) {
+			var splitB netipx.IPSetBuilder
+			splitB.AddPrefix(f.Target)
+			splitB.RemoveSet(set)
+			split, err := splitB.IPSet()
+			if err != nil {
+				return fmt.Errorf("split overlap: %w", err)
+			}
+			for _, p := range split.Prefixes() {
+				newFindings = append(newFindings, Finding{
+					Target:  p,
+					Reasons: f.Reasons,
+				})
+			}
+		} else {
+			newFindings = append(newFindings, f)
+		}
+	}
+
+	return nil
+}
+
+func (r *Report) Normalize() error {
+	for i := range r.Findings {
+		err := r.Findings[i].Normalize()
 		if err != nil {
 			return err
 		}
@@ -44,8 +74,12 @@ func (r *Report) Hash() uint32 {
 }
 
 type Finding struct {
-	Target     netip.Prefix
-	ReasonsStr string
+	Target  netip.Prefix
+	Reasons []string
+}
+
+func (f *Finding) ReasonsStr() string {
+	return strings.Join(f.Reasons, ":")
 }
 
 func (f *Finding) Normalize() error {
@@ -70,7 +104,9 @@ func (f *Finding) Hash(prev uint32) uint32 {
 	b[0] = byte(f.Target.Bits())
 	h.Write(b[:])
 
-	h.Write([]byte(f.ReasonsStr))
+	for _, r := range f.Reasons {
+		h.Write([]byte(r))
+	}
 
 	return h.Sum32()
 }
