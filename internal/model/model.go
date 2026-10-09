@@ -49,6 +49,8 @@ func (r *Report) Exclude(set *netipx.IPSet) error {
 		}
 	}
 
+	r.Findings = newFindings
+
 	return nil
 }
 
