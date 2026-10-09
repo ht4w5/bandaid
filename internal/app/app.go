@@ -127,7 +127,8 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 
 			r, err := f.Fetch(ctx)
 			if err != nil {
-				return fmt.Errorf("fetch report: %w", err)
+				logger.Error("fetch report", "err", err)
+				continue
 			}
 
 			if err := r.Exclude(whitelist); err != nil {
