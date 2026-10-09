@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ht4w5/bandaid/internal/geo"
+	"github.com/ht4w5/bandaid/internal/model"
 	"github.com/ht4w5/bandaid/internal/report"
 	"github.com/ht4w5/bandaid/pkg/execx"
 	"github.com/ht4w5/bandaid/pkg/ipx"
@@ -46,7 +48,8 @@ type Config struct {
 	DryRun bool
 }
 
-func (cfg Config) validate() error {
+// Validate checks the config for internal consistency.
+func (cfg Config) Validate() error {
 	if cfg.URL == "" {
 		return errors.New("url must not be empty")
 	}
@@ -68,7 +71,9 @@ func (cfg Config) validate() error {
 	return nil
 }
 
-func parseFileMode(s string) (os.FileMode, error) {
+// ParseFileMode parses an octal geo-file mode (e.g. "644");
+// an empty string yields the default 0644.
+func ParseFileMode(s string) (os.FileMode, error) {
 	if s == "" {
 		return 0o644, nil
 	}
@@ -80,11 +85,11 @@ func parseFileMode(s string) (os.FileMode, error) {
 }
 
 func Run(ctx context.Context, cfg Config) error {
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
 
-	mode, err := parseFileMode(cfg.GeoFileMode)
+	mode, err := ParseFileMode(cfg.GeoFileMode)
 	if err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
@@ -134,6 +139,104 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 }
 
+// reportFetcher is the minimal fetch capability needed by updater.
+// It is satisfied by *report.Fetcher and by test fakes.
+type reportFetcher interface {
+	Fetch(ctx context.Context) (*model.Report, error)
+}
+
+// updater runs a single report-update cycle: fetch the report, exclude
+// whitelisted targets, normalize it, and atomically install the generated
+// geo file. Extracted from runService's closure so that file-write
+// behavior is testable; the service loop semantics are unchanged.
+type updater struct {
+	ctx       context.Context
+	logger    *slog.Logger
+	fetcher   reportFetcher
+	gen       *geo.Generator
+	whitelist *netipx.IPSet
+	geoFile   string
+	mode      os.FileMode
+	postExec  string
+
+	// lastHash is the report hash installed by the previous update;
+	// an unchanged hash skips geo generation and rewrite.
+	lastHash uint32
+}
+
+func (u *updater) update(now time.Time) {
+	logger := u.logger
+	logger.Info("begin report update", "time", now)
+
+	r, err := u.fetcher.Fetch(u.ctx)
+	if err != nil {
+		logger.Error("fetch report", "err", err)
+		return
+	}
+
+	if err := r.Exclude(u.whitelist); err != nil {
+		logger.Error("exclude whitelist", "err", err)
+		return
+	}
+
+	if err := r.Normalize(); err != nil {
+		logger.Error("normalize report", "err", err)
+		return
+	}
+
+	hash := r.Hash()
+	if hash == u.lastHash {
+		logger.Info("report unchanged; skipping geo generation", "hash", fmt.Sprintf("%x", hash))
+		return
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(u.geoFile), "geofile-*")
+	if err != nil {
+		logger.Error("open temp file", "err", err)
+		return
+	}
+	tmpName := tmp.Name()
+
+	cleanup := func() {
+		tmp.Close()
+		os.Remove(tmpName)
+	}
+
+	if err := u.gen.Generate(tmp, func() time.Time { return now }, r, hash); err != nil {
+		logger.Error("generate geo", "err", err)
+		cleanup()
+		return
+	}
+
+	if err := tmp.Close(); err != nil {
+		logger.Error("close temp file", "err", err)
+		os.Remove(tmpName)
+		return
+	}
+
+	if err := os.Chmod(tmpName, u.mode); err != nil {
+		logger.Error("chmod temp file", "err", err)
+		os.Remove(tmpName)
+		return
+	}
+
+	if err := os.Rename(tmpName, u.geoFile); err != nil {
+		logger.Error("move geo file into place", "err", err)
+		os.Remove(tmpName)
+		return
+	}
+
+	if u.postExec != "" {
+		logger.Debug("run post cmd", "cmd", u.postExec)
+		if err := execx.Run(u.ctx, u.postExec); err != nil {
+			logger.Warn("run post cmd", "err", err)
+		}
+	}
+
+	u.lastHash = hash
+	logger.Info("geo file updated", "file", u.geoFile, "hash", fmt.Sprintf("%x", hash))
+}
+
 func runDry(ctx context.Context, f *report.Fetcher, g *geo.Generator, whitelist *netipx.IPSet) error {
 	r, err := f.Fetch(ctx)
 	if err != nil {
@@ -164,78 +267,15 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 		logger.Warn("update interval clamped", "interval", cfg.UpdateInterval)
 	}
 
-	var lastHash uint32
-
-	update := func(now time.Time) {
-		logger.Info("begin report update", "time", now)
-
-		r, err := f.Fetch(ctx)
-		if err != nil {
-			logger.Error("fetch report", "err", err)
-			return
-		}
-
-		if err := r.Exclude(whitelist); err != nil {
-			logger.Error("exclude whitelist", "err", err)
-			return
-		}
-
-		if err := r.Normalize(); err != nil {
-			logger.Error("normalize report", "err", err)
-			return
-		}
-
-		hash := r.Hash()
-		if hash == lastHash {
-			logger.Info("report unchanged; skipping geo generation", "hash", fmt.Sprintf("%x", hash))
-			return
-		}
-
-		tmp, err := os.CreateTemp(filepath.Dir(cfg.GeoFile), "geofile-*")
-		if err != nil {
-			logger.Error("open temp file", "err", err)
-			return
-		}
-		tmpName := tmp.Name()
-
-		cleanup := func() {
-			tmp.Close()
-			os.Remove(tmpName)
-		}
-
-		if err := g.Generate(tmp, func() time.Time { return now }, r, hash); err != nil {
-			logger.Error("generate geo", "err", err)
-			cleanup()
-			return
-		}
-
-		if err := tmp.Close(); err != nil {
-			logger.Error("close temp file", "err", err)
-			os.Remove(tmpName)
-			return
-		}
-
-		if err := os.Chmod(tmpName, mode); err != nil {
-			logger.Error("chmod temp file", "err", err)
-			os.Remove(tmpName)
-			return
-		}
-
-		if err := os.Rename(tmpName, cfg.GeoFile); err != nil {
-			logger.Error("move geo file into place", "err", err)
-			os.Remove(tmpName)
-			return
-		}
-
-		if cfg.PostExec != "" {
-			logger.Debug("run post cmd", "cmd", cfg.PostExec)
-			if err := execx.Run(ctx, cfg.PostExec); err != nil {
-				logger.Warn("run post cmd", "err", err)
-			}
-		}
-
-		lastHash = hash
-		logger.Info("geo file updated", "file", cfg.GeoFile, "hash", fmt.Sprintf("%x", hash))
+	u := &updater{
+		ctx:       ctx,
+		logger:    logger,
+		fetcher:   f,
+		gen:       g,
+		whitelist: whitelist,
+		geoFile:   cfg.GeoFile,
+		mode:      mode,
+		postExec:  cfg.PostExec,
 	}
 
 	timer := time.NewTimer(0)
@@ -246,7 +286,7 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 		case <-ctx.Done():
 			return nil
 		case now := <-timer.C:
-			update(now)
+			u.update(now)
 			timer.Reset(cfg.UpdateInterval)
 		}
 	}
