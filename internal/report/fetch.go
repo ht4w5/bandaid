@@ -53,6 +53,10 @@ func (fs *Fetcher) Fetch(ctx context.Context) (*model.Report, error) {
 	defer resp.Body.Close()
 	logx.LogHTTPResponse(logger, resp)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bad http response: %d", resp.StatusCode)
+	}
+
 	report, err := Parse(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("parse report: %w", err)
