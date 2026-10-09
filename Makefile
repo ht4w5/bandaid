@@ -1,0 +1,57 @@
+MODULE      := github.com/ht4w5/bandaid
+PKG_INFO    := $(MODULE)/internal/info
+CMD         := ./cmd/bandaid
+BIN_DIR     := bin
+BIN         := $(BIN_DIR)/bandaid
+
+GO          ?= go
+
+VERSION     ?= $(shell tr -d '[:space:]' 2>/dev/null < .version || echo dev)
+COMMIT      ?= $(shell git rev-parse --short=7 HEAD 2>/dev/null)
+DIRTY       ?= $(shell if git rev-parse --git-dir >/dev/null 2>&1; then if git diff-index --quiet HEAD -- 2>/dev/null; then echo false; else echo true; fi; fi)
+
+SOURCE_DATE_EPOCH ?=
+BUILD_DATE ?= $(shell if [ -n "$(SOURCE_DATE_EPOCH)" ]; then \
+	date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+	date -u -r "$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; \
+	else date -u +%Y-%m-%dT%H:%M:%SZ; fi)
+
+LDFLAGS     := -s -w \
+	-X '$(PKG_INFO).version=$(VERSION)' \
+	-X '$(PKG_INFO).commit=$(COMMIT)' \
+	-X '$(PKG_INFO).buildDate=$(BUILD_DATE)' \
+	-X '$(PKG_INFO).dirtyFlag=$(DIRTY)'
+
+GOFLAGS     ?= -trimpath
+BUILD_FLAGS := $(GOFLAGS) -ldflags "$(LDFLAGS)"
+
+.PHONY: all build install clean fmt vet test info
+
+all: build
+
+build:
+	@mkdir -p $(BIN_DIR)
+	$(GO) build $(BUILD_FLAGS) -o $(BIN) $(CMD)
+
+install:
+	$(GO) install $(BUILD_FLAGS) $(CMD)
+
+test:
+	$(GO) test ./...
+
+fmt:
+	$(GO) fmt ./...
+
+vet:
+	$(GO) vet ./...
+
+info:
+	@echo "Version:     $(VERSION)"
+	@echo "Commit:      $(COMMIT)"
+	@echo "BuildDate:   $(BUILD_DATE)"
+	@echo "Dirty:       $(DIRTY)"
+	@echo "GoVersion:   $(shell $(GO) env GOVERSION)"
+	@echo "Platform:    $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)"
+
+clean:
+	rm -rf $(BIN_DIR)

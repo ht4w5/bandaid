@@ -57,7 +57,7 @@ func (fs *Fetcher) Fetch(ctx context.Context) (*model.Report, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("User-Agent", info.String())
+	req.Header.Set("User-Agent", info.UserAgent())
 	logx.LogHTTPRequest(logger, req)
 
 	resp, err := fs.httpClient.Do(req)
