@@ -155,6 +155,50 @@ func TestGenerateHeaderIdentifiesGenerator(t *testing.T) {
 	}
 }
 
+func TestGenerateFallsBackToCurrentTimeWhenNowIsNil(t *testing.T) {
+	g := mustGenerator(t, geo.GeneratorConfig{VariableName: "$geo"})
+
+	// With no injected clock, Generate must stamp the real current time. The
+	// expectation is observed from outside the call as the window [before,
+	// after] bracketing it — no fixed literal and no re-derivation from the
+	// production formatting.
+	before := time.Now()
+
+	var buf bytes.Buffer
+	if err := g.Generate(&buf, nil, &model.Report{}, 0); err != nil {
+		t.Fatalf("Generate with nil now: %v", err)
+	}
+
+	after := time.Now()
+
+	const stampPrefix = "# Time of generation: "
+	var stamp string
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.HasPrefix(line, stampPrefix) {
+			stamp = strings.TrimPrefix(line, stampPrefix)
+			break
+		}
+	}
+	if stamp == "" {
+		t.Fatalf("output has no %q line: %q", stampPrefix, buf.String())
+	}
+	ts, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t.Fatalf("timestamp %q does not parse as RFC 3339: %v", stamp, err)
+	}
+
+	// The line carries second precision, so the stamp can trail the real
+	// instant by up to a second; truncate the window's lower bound the same
+	// way before comparing.
+	lo := before.Truncate(time.Second)
+	if ts.Before(lo) {
+		t.Errorf("timestamp %v is before the call window [%v, %v]", ts, lo, after)
+	}
+	if ts.After(after) {
+		t.Errorf("timestamp %v is after the call window [%v, %v]", ts, lo, after)
+	}
+}
+
 func TestGenerateWritesDefaultStringWhenSet(t *testing.T) {
 	// Regression bd6550e: the default line was not written at all.
 	report := &model.Report{Findings: []model.Finding{
@@ -280,6 +324,19 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 	return short, w.err
 }
 
+// Coverage note (W2 addendum): bufio.Writer surfaces an error only when its
+// 4 KiB buffer must flush (WriteString touches the underlying writer only for
+// len(s) > Available), so writeString can fail only after roughly 4 KiB of
+// output. Every write before the findings loop (header lines, geo opening,
+// default line) is far smaller for config of realistic size (a >4 KiB
+// DefaultString could force a flush there, but that is pathological config
+// input), so writeString cannot fail there and the `return writeErr` guards
+// at those sites cannot fire; writeString's own "writeErr != nil" guard is
+// dead outright, since every caller stops at the first failure. The
+// findings-loop guard is reached below via the mid-stream case; the
+// closing-brace guard would need input sized byte-exactly to the buffer
+// boundary, which is implementation coupling, so it is deliberately left
+// uncovered.
 func TestGenerateReturnsWriterError(t *testing.T) {
 	small := &model.Report{Findings: []model.Finding{
 		{Target: netip.MustParsePrefix("10.0.0.0/8"), Reasons: []string{"alpha"}},
