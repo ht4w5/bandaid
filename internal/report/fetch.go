@@ -28,6 +28,10 @@ type Fetcher struct {
 }
 
 func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
+	if cfg.Timeout < time.Second {
+		return nil, fmt.Errorf("timeout must not be shorter than 1 second: %s", cfg.Timeout)
+	}
+
 	c, err := newMTLSClient(cfg.CaFile, cfg.CertFile, cfg.KeyFile, cfg.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("create mtls client: %w", err)
@@ -68,10 +72,6 @@ func (fs *Fetcher) Fetch(ctx context.Context) (*model.Report, error) {
 }
 
 func newMTLSClient(caFile, certFile, keyFile string, timeout time.Duration) (*http.Client, error) {
-	if timeout < time.Second {
-		return nil, fmt.Errorf("timeout must not be shorter than 1 second: %s", timeout)
-	}
-
 	if (certFile == "") != (keyFile == "") {
 		return nil, fmt.Errorf("client cert and key must be provided together: cert=%q key=%q", certFile, keyFile)
 	}

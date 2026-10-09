@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/ht4w5/bd2geo/internal/geo"
@@ -30,7 +31,7 @@ type Config struct {
 	// Service config.
 	UpdateInterval time.Duration
 	GeoFile        string
-	GeoFileMode    uint64
+	GeoFileMode    string
 	PostCmd        string
 
 	// Geo config.
@@ -116,6 +117,12 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 		cfg.UpdateInterval = time.Minute
 		logger.Warn("update interval clamped", "interval", cfg.UpdateInterval)
 	}
+
+	mode, err := strconv.ParseUint(cfg.GeoFileMode, 8, 9)
+	if err != nil {
+		return fmt.Errorf("invalid geofile mode: %q: %w", cfg.GeoFileMode, err)
+	}
+
 	ticker := time.NewTicker(cfg.UpdateInterval)
 	defer ticker.Stop()
 
@@ -124,7 +131,7 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
 		case t := <-ticker.C:
 			logger.Info("begin report update", "time", t)
 
@@ -174,7 +181,7 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 				continue
 			}
 
-			if err := os.Chmod(tmpName, os.FileMode(cfg.GeoFileMode&0o777)); err != nil {
+			if err := os.Chmod(tmpName, os.FileMode(mode&0o777)); err != nil {
 				logger.Error("chmod temp file", "err", err)
 				os.Remove(tmpName)
 				continue
