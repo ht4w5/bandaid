@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ht4w5/bd2geo/internal/app"
@@ -11,6 +14,8 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+
 	var cfg app.Config
 	var whitelistString string
 	var logLevel string
@@ -37,9 +42,13 @@ func main() {
 	}
 
 	logger := logx.NewLogger(logLevel)
-	ctx := logx.WithLogger(context.Background(), logger)
+	ctx = logx.WithLogger(ctx, logger)
 
 	if err := app.Run(ctx, cfg); err != nil {
 		logger.Error("run app", "err", err)
+		stop()
+		os.Exit(1)
 	}
+	stop()
+	os.Exit(0)
 }
