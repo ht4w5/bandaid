@@ -3,26 +3,32 @@ package main
 import (
 	"context"
 	"flag"
-	"os"
-	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/ht4w5/bd2geo/internal/app"
+	"github.com/ht4w5/bd2geo/pkg/logx"
 )
 
 func main() {
 	var cfg app.Config
 	var whitelistString string
+	var logLevel string
 
 	// Register flags.
-	flag.StringVar(&cfg.InFile, "i", "", "path to infile")
-	flag.StringVar(&cfg.OutFile, "o", "", "path to outfile")
-	flag.BoolVar(&cfg.Verbose, "v", false, "be verbose")
+	flag.StringVar(&cfg.URL, "url", "", "report URL to fetch")
+	flag.StringVar(&cfg.CaFile, "caFile", "", "CA certificate file")
+	flag.StringVar(&cfg.CertFile, "certFile", "", "client certificate file")
+	flag.StringVar(&cfg.KeyFile, "keyFile", "", "client key file")
 	flag.StringVar(&whitelistString, "w", "", "whitelist targets delimited with commas")
-	flag.BoolVar(&cfg.Overwrite, "overwrite", false, "overwrite existing outfile")
+	flag.DurationVar(&cfg.UpdateInterval, "interval", time.Minute, "geo file update interval")
+	flag.StringVar(&cfg.GeoFile, "geoFile", "", "generated geo file path")
+	flag.StringVar(&cfg.PostCmd, "postCmd", "", "command to run after geo file update")
 	flag.StringVar(&cfg.VariableName, "varName", "$geo", "generated variable name")
 	flag.StringVar(&cfg.AddressVariableName, "addrVarName", "", "generated address variable name")
 	flag.StringVar(&cfg.DefaultString, "defaultStr", "", "generated default string")
+	flag.BoolVar(&cfg.DryRun, "dryRun", false, "fetch and generate once without running as a service")
+	flag.StringVar(&logLevel, "logLevel", "info", "log level: none, error, warn, info, debug or a numeric level")
 
 	flag.Parse()
 
@@ -30,21 +36,10 @@ func main() {
 		cfg.WhitelistTargets = strings.Split(whitelistString, ",")
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	logger := logx.NewLogger(logLevel)
+	ctx := logx.WithLogger(context.Background(), logger)
 
-	done := make(chan int, 1)
-	go func() { done <- app.Run(ctx, cfg) }()
-
-	select {
-	case code := <-done:
-		os.Exit(code)
-	case <-ctx.Done():
-		select {
-		case code := <-done:
-			os.Exit(code)
-		default:
-		}
-		os.Exit(130) // 128 + SIGINT
+	if err := app.Run(ctx, cfg); err != nil {
+		logger.Error("run app", "err", err)
 	}
 }
