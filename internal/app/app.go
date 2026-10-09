@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,7 +45,49 @@ type Config struct {
 	DryRun bool
 }
 
+func (cfg Config) validate() error {
+	if cfg.URL == "" {
+		return errors.New("url must not be empty")
+	}
+	u, err := url.Parse(cfg.URL)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("url scheme must be http or https: %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return errors.New("url host must not be empty")
+	}
+
+	if !cfg.DryRun && cfg.GeoFile == "" {
+		return errors.New("geofile must not be empty in service mode")
+	}
+
+	return nil
+}
+
+func parseFileMode(s string) (os.FileMode, error) {
+	if s == "" {
+		return 0o644, nil
+	}
+	m, err := strconv.ParseUint(s, 8, 9)
+	if err != nil {
+		return 0, fmt.Errorf("invalid geofile mode %q: %w", s, err)
+	}
+	return os.FileMode(m), nil
+}
+
 func Run(ctx context.Context, cfg Config) error {
+	if err := cfg.validate(); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+
+	mode, err := parseFileMode(cfg.GeoFileMode)
+	if err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+
 	// Parse whitelist.
 	var whitelistB netipx.IPSetBuilder
 
@@ -84,7 +128,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.DryRun {
 		return runDry(ctx, f, g, whitelist)
 	} else {
-		return runService(ctx, cfg, f, g, whitelist)
+		return runService(ctx, cfg, f, g, whitelist, mode)
 	}
 }
 
@@ -111,16 +155,11 @@ func runDry(ctx context.Context, f *report.Fetcher, g *geo.Generator, whitelist 
 	return nil
 }
 
-func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Generator, whitelist *netipx.IPSet) error {
+func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Generator, whitelist *netipx.IPSet, mode os.FileMode) error {
 	logger := logx.FromContext(ctx)
 	if cfg.UpdateInterval < time.Minute {
 		cfg.UpdateInterval = time.Minute
 		logger.Warn("update interval clamped", "interval", cfg.UpdateInterval)
-	}
-
-	mode, err := strconv.ParseUint(cfg.GeoFileMode, 8, 9)
-	if err != nil {
-		return fmt.Errorf("invalid geofile mode: %q: %w", cfg.GeoFileMode, err)
 	}
 
 	var lastHash uint32
@@ -174,7 +213,7 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 			return
 		}
 
-		if err := os.Chmod(tmpName, os.FileMode(mode&0o777)); err != nil {
+		if err := os.Chmod(tmpName, mode); err != nil {
 			logger.Error("chmod temp file", "err", err)
 			os.Remove(tmpName)
 			return
