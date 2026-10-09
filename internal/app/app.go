@@ -70,6 +70,26 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
+func logConfig(logger *slog.Logger, cfg Config, mode os.FileMode) {
+	logger.Debug("loaded config",
+		"url", cfg.URL,
+		"cacert", cfg.CaFile,
+		"cert", cfg.CertFile,
+		"key", cfg.KeyFile,
+		"fetch_timeout", cfg.FetchTimeout,
+		"max_report_bytes", cfg.MaxReportBytes,
+		"whitelist_targets", cfg.WhitelistTargets,
+		"update_interval", cfg.UpdateInterval,
+		"geofile", cfg.GeoFile,
+		"geofile_mode", fmt.Sprintf("%04o", mode),
+		"post_exec", cfg.PostExec,
+		"var_name", cfg.VariableName,
+		"addr_var_name", cfg.AddressVariableName,
+		"default_str", cfg.DefaultString,
+		"dry_run", cfg.DryRun,
+	)
+}
+
 // ParseFileMode parses an octal file mode; "" defaults to 0644.
 func ParseFileMode(s string) (os.FileMode, error) {
 	if s == "" {
@@ -129,6 +149,8 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("create report fetcher: %w", err)
 	}
+
+	logConfig(logx.FromContext(ctx), cfg, mode)
 
 	if cfg.DryRun {
 		return runDry(ctx, f, g, whitelist)
