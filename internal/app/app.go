@@ -17,10 +17,11 @@ import (
 
 type Config struct {
 	// Fetch config.
-	URL      string
-	CaFile   string
-	CertFile string
-	KeyFile  string
+	URL          string
+	CaFile       string
+	CertFile     string
+	KeyFile      string
+	FetchTimeout time.Duration
 
 	// Report config.
 	// Prefix or Address.
@@ -72,6 +73,7 @@ func Run(ctx context.Context, cfg Config) error {
 		CaFile:   cfg.CaFile,
 		CertFile: cfg.CertFile,
 		KeyFile:  cfg.KeyFile,
+		Timeout:  cfg.FetchTimeout,
 	})
 	if err != nil {
 		return fmt.Errorf("create report fetcher: %w", err)

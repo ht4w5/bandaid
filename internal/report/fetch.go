@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/ht4w5/bd2geo/internal/info"
 	"github.com/ht4w5/bd2geo/internal/model"
@@ -18,6 +19,7 @@ type FetcherConfig struct {
 	CertFile string
 	KeyFile  string
 	URL      string
+	Timeout  time.Duration
 }
 
 type Fetcher struct {
@@ -26,7 +28,7 @@ type Fetcher struct {
 }
 
 func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
-	c, err := newMTLSClient(cfg.CaFile, cfg.CertFile, cfg.KeyFile)
+	c, err := newMTLSClient(cfg.CaFile, cfg.CertFile, cfg.KeyFile, cfg.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("create mtls client: %w", err)
 	}
@@ -65,7 +67,11 @@ func (fs *Fetcher) Fetch(ctx context.Context) (*model.Report, error) {
 	return report, nil
 }
 
-func newMTLSClient(caFile, certFile, keyFile string) (*http.Client, error) {
+func newMTLSClient(caFile, certFile, keyFile string, timeout time.Duration) (*http.Client, error) {
+	if timeout < time.Second {
+		return nil, fmt.Errorf("timeout must not be shorter than 1 second: %s", timeout)
+	}
+
 	if (certFile == "") != (keyFile == "") {
 		return nil, fmt.Errorf("client cert and key must be provided together: cert=%q key=%q", certFile, keyFile)
 	}
@@ -100,5 +106,8 @@ func newMTLSClient(caFile, certFile, keyFile string) (*http.Client, error) {
 	}
 	transport.TLSClientConfig = tlsCfg
 
-	return &http.Client{Transport: transport}, nil
+	return &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}, nil
 }

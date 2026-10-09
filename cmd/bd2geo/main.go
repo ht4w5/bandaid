@@ -34,6 +34,7 @@ func main() {
 	flag.StringVar(&cfg.DefaultString, "defaultStr", "", "generated default string")
 	flag.BoolVar(&cfg.DryRun, "dryRun", false, "fetch and generate once without running as a service")
 	flag.StringVar(&logLevel, "logLevel", "info", "log level: none, error, warn, info, debug or a numeric level")
+	flag.DurationVar(&cfg.FetchTimeout, "fetch-timeout", 10*time.Second, "set fetch HTTP timeout")
 
 	flag.Parse()
 
