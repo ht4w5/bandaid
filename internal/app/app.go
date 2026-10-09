@@ -20,11 +20,12 @@ import (
 
 type Config struct {
 	// Fetch config.
-	URL          string
-	CaFile       string
-	CertFile     string
-	KeyFile      string
-	FetchTimeout time.Duration
+	URL            string
+	CaFile         string
+	CertFile       string
+	KeyFile        string
+	FetchTimeout   time.Duration
+	MaxReportBytes int64
 
 	// Report config.
 	// Prefix or Address.
@@ -115,11 +116,12 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	f, err := report.NewFetcher(report.FetcherConfig{
-		URL:      cfg.URL,
-		CaFile:   cfg.CaFile,
-		CertFile: cfg.CertFile,
-		KeyFile:  cfg.KeyFile,
-		Timeout:  cfg.FetchTimeout,
+		URL:            cfg.URL,
+		CaFile:         cfg.CaFile,
+		CertFile:       cfg.CertFile,
+		KeyFile:        cfg.KeyFile,
+		Timeout:        cfg.FetchTimeout,
+		MaxReportBytes: cfg.MaxReportBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("create report fetcher: %w", err)

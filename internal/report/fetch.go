@@ -1,10 +1,12 @@
 package report
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -14,12 +16,15 @@ import (
 	"github.com/ht4w5/bandaid/pkg/logx"
 )
 
+const maxReportBytesCap = 1 << 40 // 1 TiB
+
 type FetcherConfig struct {
-	CaFile   string
-	CertFile string
-	KeyFile  string
-	URL      string
-	Timeout  time.Duration
+	CaFile         string
+	CertFile       string
+	KeyFile        string
+	URL            string
+	Timeout        time.Duration
+	MaxReportBytes int64
 }
 
 type Fetcher struct {
@@ -30,6 +35,9 @@ type Fetcher struct {
 func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
 	if cfg.Timeout < time.Second {
 		return nil, fmt.Errorf("timeout must not be shorter than 1 second: %s", cfg.Timeout)
+	}
+	if cfg.MaxReportBytes <= 0 || cfg.MaxReportBytes > maxReportBytesCap {
+		return nil, fmt.Errorf("max report bytes must be between 1 and %d: %d", maxReportBytesCap, cfg.MaxReportBytes)
 	}
 
 	c, err := newMTLSClient(cfg.CaFile, cfg.CertFile, cfg.KeyFile, cfg.Timeout)
@@ -63,7 +71,15 @@ func (fs *Fetcher) Fetch(ctx context.Context) (*model.Report, error) {
 		return nil, fmt.Errorf("bad http response: %d", resp.StatusCode)
 	}
 
-	report, err := Parse(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, fs.cfg.MaxReportBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read report: %w", err)
+	}
+	if int64(len(body)) > fs.cfg.MaxReportBytes {
+		return nil, fmt.Errorf("report too large: exceeds %d bytes", fs.cfg.MaxReportBytes)
+	}
+
+	report, err := Parse(bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("parse report: %w", err)
 	}
