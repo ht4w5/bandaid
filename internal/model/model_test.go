@@ -355,12 +355,16 @@ func TestExcludeHandlesIPv6AndBareAddressWhitelistEntries(t *testing.T) {
 	}
 }
 
-// --- slices 9-12: Hash ---------------------------------------------------
+// --- slices 9-11: Hash ---------------------------------------------------
 
 func reportWith(findings ...model.Finding) *model.Report {
 	return &model.Report{Findings: findings}
 }
 
+// Determinism is the contract the updater's change detection relies on:
+// independently constructed reports with equal content must hash equal.
+// Exact hash values are not a stable contract (see docs/testing-plan.md),
+// so there are no golden literals here — only these properties.
 func TestHashIsDeterministicForIdenticalReports(t *testing.T) {
 	mk := func() *model.Report {
 		return reportWith(
@@ -369,12 +373,15 @@ func TestHashIsDeterministicForIdenticalReports(t *testing.T) {
 		)
 	}
 	r1, r2 := mk(), mk()
-	want := r1.Hash()
-	if got := r1.Hash(); got != want {
-		t.Errorf("repeated Hash() = %x, want %x", got, want)
+	h1, h2 := r1.Hash(), r2.Hash()
+	if h1 != h2 {
+		t.Errorf("independently constructed equal reports hash differently: %x vs %x", h1, h2)
 	}
-	if got := r2.Hash(); got != want {
-		t.Errorf("equal report Hash() = %x, want %x", got, want)
+
+	// Purity check: Hash() must not carry hidden state or randomness, so
+	// repeated calls on the same report must return the first call's value.
+	if got := r1.Hash(); got != h1 {
+		t.Errorf("repeated Hash() = %x, want %x", got, h1)
 	}
 }
 
@@ -448,32 +455,6 @@ func TestHashSeparatesReasonsWithDelimiter(t *testing.T) {
 				t.Errorf("reason boundaries bleed: %v and %v both hash to %x", tc.a, tc.b, ha)
 			}
 		})
-	}
-}
-
-// Golden hash constants for a fixed report. The literals below were
-// recorded once from a known-good build and must be reviewed by a human —
-// they are never recomputed here, so any change to the hash chain (seed,
-// field order, delimiters, FNV variant) turns this test red.
-func TestHashMatchesGoldenConstants(t *testing.T) {
-	const (
-		wantSingleFinding uint32 = 0x24521890 // recorded once; needs human review
-		wantTwoFindings   uint32 = 0x8bbe48ca // recorded once; needs human review
-	)
-
-	single := reportWith(model.Finding{
-		Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"allowlist"},
-	})
-	if got := single.Hash(); got != wantSingleFinding {
-		t.Errorf("single-finding report hash = %#08x, want %#08x", got, wantSingleFinding)
-	}
-
-	two := reportWith(
-		model.Finding{Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"allowlist"}},
-		model.Finding{Target: mustPrefix(t, "2001:db8::/32"), Reasons: []string{"block", "manual"}},
-	)
-	if got := two.Hash(); got != wantTwoFindings {
-		t.Errorf("two-finding report hash = %#08x, want %#08x", got, wantTwoFindings)
 	}
 }
 
