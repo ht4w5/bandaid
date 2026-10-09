@@ -23,7 +23,7 @@ Go 1.27 toolchain.
 
 | Seam (public API)                                  | Package        | Why critical |
 | -------------------------------------------------- | -------------- | ------------ |
-| `model.Report.{Exclude, Normalize, Hash}`          | internal/model | IP-set arithmetic, change-detection hash; past bug here (`hashDelim`) |
+| `model.Report.{Exclude, Normalize, Hash}`          | internal/model | IP-set arithmetic, in-process change-detection hash; past bug here (`hashDelim`) |
 | `model.Finding.{Normalize, String, ReasonsStr}`    | internal/model | untrusted input validation (target + reason grammar) |
 | `geo.NewGenerator`, `Generator.Generate`           | internal/geo   | the product output (nginx geo file); past bugs in default/addr-var handling |
 | `report.Parse`                                     | internal/report| untrusted JSON wire format |
@@ -84,12 +84,17 @@ Vertical slices (each = one test → green):
    `10.0.0.0/25` → exactly one finding `10.0.0.128/25`; **reasons survive the split**.
 7. **Exclude drops fully covered findings** — whitelist superset of target → no findings.
 8. **Exclude handles IPv6 and bare-address whitelist entries** (`1.2.3.4/32`-style).
-9. **Hash is a deterministic chain** — same findings → same hash across runs.
+9. **Hash is a deterministic chain** — identical findings → identical hash: independently
+   constructed equal reports agree (the updater's change-detection contract; values are
+   stable only within a version, not across versions — see the note at slice 12).
 10. **Hash discriminates** — hash differs when target, prefix length, or reasons differ.
 11. **Hash delimiter regression** — reasons `["ab","c"]` vs `["a","bc"]` hash differently
     (this is the bug fixed in `680c392`; also covers "reasons vs target bytes bleed").
-12. **Hash golden constants** — a small fixed report pinned to recorded `uint32` literals
-    (literals recorded once and reviewed by a human, not recomputed in the test).
+12. **Hash golden constants — dropped (decision).** Exact `Report.Hash()` values are **not**
+    a pinned contract: change detection (`lastHash`) is in-process only and resets on every
+    restart, and the geo file's `# Report hash:` header is diagnostic-only — so the hash
+    algorithm may change between versions without consequence, and pinning exact `uint32`
+    literals would over-specify behavior. The required hash invariants are slices 9–11.
 13. **String/ReasonsStr contract** — reasons joined with `":"`, `String()` is `target,reasons`
     (this string is the geo-file value contract; keep assertions here, not in W2).
 
@@ -99,8 +104,9 @@ Seams: `NewGenerator`, `Generator.Generate`.
 
 1. **NewGenerator rejects empty VariableName**; accepts minimal valid config.
 2. **Generate rejects nil report / nil writer** — clear errors, no panic.
-3. **Golden geo block** — fixed `now` and hash; a representative report (3 findings, mixed
-   IPv4/IPv6) must render to one exact expected multiline string literal (header lines,
+3. **Golden geo block** — fixed `now` and a fixed hash literal passed to `Generate` (a
+   rendering input, not a pinned `Report.Hash()` value); a representative report (3 findings,
+   mixed IPv4/IPv6) must render to one exact expected multiline string literal (header lines,
    `geo` opening, entries with `%q` quoting, closing `}`). The literal is written by hand from
    the nginx `geo` format spec, not copied from output.
 4. **DefaultString rendered when set** (regression `bd6550e`: default was not written);
