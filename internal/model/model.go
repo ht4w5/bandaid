@@ -22,6 +22,10 @@ var (
 	ErrInvalidReason = errors.New("invalid reason")
 )
 
+var (
+	hashDelim = []byte{0}
+)
+
 type Report struct {
 	Findings []Finding
 }
@@ -58,7 +62,7 @@ func (r *Report) Normalize() error {
 	for i := range r.Findings {
 		err := r.Findings[i].Normalize()
 		if err != nil {
-			return err
+			return fmt.Errorf("normalize %q: %w", &r.Findings[i], err)
 		}
 	}
 
@@ -80,6 +84,10 @@ func (r *Report) Hash() uint32 {
 type Finding struct {
 	Target  netip.Prefix
 	Reasons []string
+}
+
+func (f *Finding) String() string {
+	return fmt.Sprintf("%s,%s", f.Target.String(), f.ReasonsStr())
 }
 
 func (f *Finding) ReasonsStr() string {
@@ -118,6 +126,7 @@ func (f *Finding) Hash(prev uint32) uint32 {
 
 	for _, r := range f.Reasons {
 		h.Write([]byte(r))
+		h.Write(hashDelim)
 	}
 
 	return h.Sum32()
