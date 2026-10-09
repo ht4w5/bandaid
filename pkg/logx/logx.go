@@ -3,6 +3,7 @@ package logx
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -49,4 +50,47 @@ func NewLogger(level string) *slog.Logger {
 		Level:     l,
 		AddSource: l == slog.LevelDebug,
 	}))
+}
+
+func LogHTTPRequest(logger *slog.Logger, req *http.Request) {
+	if req == nil || logger == nil {
+		return
+	}
+
+	url := ""
+	if req.URL != nil {
+		url = req.URL.String()
+	}
+
+	logger.Debug(
+		"sent request",
+		"method", req.Method,
+		"url", url,
+	)
+}
+
+func LogHTTPResponse(logger *slog.Logger, resp *http.Response) {
+	if resp == nil || logger == nil {
+		return
+	}
+
+	url := ""
+	method := ""
+	if resp.Request != nil {
+		method = resp.Request.Method
+		if resp.Request.URL != nil {
+			url = resp.Request.URL.String()
+		}
+	}
+
+	level := slog.LevelDebug
+	if resp.StatusCode >= http.StatusBadRequest {
+		level = slog.LevelWarn
+	}
+
+	logger.Log(context.Background(), level, "got response",
+		"status", resp.StatusCode,
+		"method", method,
+		"url", url,
+	)
 }
