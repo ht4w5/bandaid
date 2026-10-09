@@ -3,7 +3,7 @@ package info
 import "fmt"
 
 const (
-	Name = ""
+	Name = "bandaid"
 )
 
 var (
