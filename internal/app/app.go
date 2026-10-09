@@ -48,7 +48,6 @@ type Config struct {
 	DryRun bool
 }
 
-// Validate checks the config for internal consistency.
 func (cfg Config) Validate() error {
 	if cfg.URL == "" {
 		return errors.New("url must not be empty")
@@ -71,8 +70,7 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
-// ParseFileMode parses an octal geo-file mode (e.g. "644");
-// an empty string yields the default 0644.
+// ParseFileMode parses an octal file mode; "" defaults to 0644.
 func ParseFileMode(s string) (os.FileMode, error) {
 	if s == "" {
 		return 0o644, nil
@@ -139,16 +137,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 }
 
-// reportFetcher is the minimal fetch capability needed by updater.
-// It is satisfied by *report.Fetcher and by test fakes.
 type reportFetcher interface {
 	Fetch(ctx context.Context) (*model.Report, error)
 }
 
-// updater runs a single report-update cycle: fetch the report, exclude
-// whitelisted targets, normalize it, and atomically install the generated
-// geo file. Extracted from runService's closure so that file-write
-// behavior is testable; the service loop semantics are unchanged.
+// updater runs one report-update cycle, atomically replacing the geo file.
 type updater struct {
 	ctx       context.Context
 	logger    *slog.Logger
@@ -159,8 +152,7 @@ type updater struct {
 	mode      os.FileMode
 	postExec  string
 
-	// lastHash is the report hash installed by the previous update;
-	// an unchanged hash skips geo generation and rewrite.
+	// lastHash of the installed report; unchanged hash skips the rewrite.
 	lastHash uint32
 }
 

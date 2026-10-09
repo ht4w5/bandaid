@@ -42,11 +42,8 @@ func NewGenerator(cfg GeneratorConfig) (*Generator, error) {
 }
 
 // Generate writes report as an Nginx geo block to w.
-//
-// now must not be nil; it supplies the generation timestamp in the block
-// header. Write failures are reported only by the final flush: bufio.Writer
-// remembers a failed flush and the flush returns it, wrapped as
-// "flush geo block: ...".
+// now must not be nil; it supplies the header timestamp. Write errors
+// surface only at the final flush.
 func (g *Generator) Generate(w io.Writer, now func() time.Time, report *model.Report, hash uint32) error {
 	if report == nil {
 		return errors.New("nil report")
