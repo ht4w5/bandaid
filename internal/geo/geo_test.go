@@ -280,24 +280,14 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 	return short, w.err
 }
 
-// Coverage note: Generate's nil-clock fallback (now == nil → time.Now) and
-// its unreachable `return writeErr` guards are intentionally uncovered. Their
-// fate is an open decision — dead-guard cleanup vs. coverage waiver — and is
-// not settled here.
-//
-// Why the writeErr guards cannot fire: bufio.Writer surfaces an error only
-// when its 4 KiB buffer must flush (WriteString touches the underlying writer
-// only for len(s) > Available), so writeString can fail only after roughly
-// 4 KiB of output. Every write before the findings loop (header lines, geo
-// opening, default line) is far smaller for config of realistic size (a >4 KiB
-// DefaultString could force a flush there, but that is pathological config
-// input), so writeString cannot fail there and the `return writeErr` guards
-// at those sites cannot fire; writeString's own "writeErr != nil" guard is
-// dead outright, since every caller stops at the first failure. The
-// findings-loop guard is reached below via the mid-stream case; the
-// closing-brace guard would need input sized byte-exactly to the buffer
-// boundary, which is implementation coupling, so it is deliberately left
-// uncovered.
+// Coverage note: Generate reports write failures only through the final
+// flush — bufio.Writer remembers a failed flush and Flush() returns it,
+// wrapped as "flush geo block: %w". Both failure scenarios below exercise
+// that single error path: the immediate failure (the small report fits in the
+// 4 KiB buffer, so nothing reaches the writer until flush) and the mid-stream
+// failure (the big report forces an early flush; later buffered writes are
+// discarded and formatting runs on to the final flush). errors.Is matches the
+// underlying writer error in both cases.
 func TestGenerateReturnsWriterError(t *testing.T) {
 	small := &model.Report{Findings: []model.Finding{
 		{Target: netip.MustParsePrefix("10.0.0.0/8"), Reasons: []string{"alpha"}},
