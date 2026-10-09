@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ht4w5/bd2geo/internal/app"
-	"github.com/ht4w5/bd2geo/pkg/logx"
+	"github.com/ht4w5/bandaid/internal/app"
+	"github.com/ht4w5/bandaid/pkg/logx"
 )
 
 func main() {

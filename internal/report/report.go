@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ht4w5/bd2geo/internal/model"
-	"github.com/ht4w5/bd2geo/pkg/ipx"
+	"github.com/ht4w5/bandaid/internal/model"
+	"github.com/ht4w5/bandaid/pkg/ipx"
 )
 
 func Parse(r io.Reader) (*model.Report, error) {

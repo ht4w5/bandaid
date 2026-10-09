@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/ht4w5/bd2geo/internal/info"
-	"github.com/ht4w5/bd2geo/internal/model"
-	"github.com/ht4w5/bd2geo/pkg/logx"
+	"github.com/ht4w5/bandaid/internal/info"
+	"github.com/ht4w5/bandaid/internal/model"
+	"github.com/ht4w5/bandaid/pkg/logx"
 )
 
 type FetcherConfig struct {

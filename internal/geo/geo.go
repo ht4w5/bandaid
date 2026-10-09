@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/ht4w5/bd2geo/internal/info"
-	"github.com/ht4w5/bd2geo/internal/model"
+	"github.com/ht4w5/bandaid/internal/info"
+	"github.com/ht4w5/bandaid/internal/model"
 )
 
 type GeneratorConfig struct {

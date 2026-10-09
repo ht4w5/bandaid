@@ -1,4 +1,4 @@
-module github.com/ht4w5/bd2geo
+module github.com/ht4w5/bandaid
 
 go 1.27.0
 

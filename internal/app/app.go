@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ht4w5/bd2geo/internal/geo"
-	"github.com/ht4w5/bd2geo/internal/report"
-	"github.com/ht4w5/bd2geo/pkg/execx"
-	"github.com/ht4w5/bd2geo/pkg/ipx"
-	"github.com/ht4w5/bd2geo/pkg/logx"
+	"github.com/ht4w5/bandaid/internal/geo"
+	"github.com/ht4w5/bandaid/internal/report"
+	"github.com/ht4w5/bandaid/pkg/execx"
+	"github.com/ht4w5/bandaid/pkg/ipx"
+	"github.com/ht4w5/bandaid/pkg/logx"
 	"go4.org/netipx"
 )
 
