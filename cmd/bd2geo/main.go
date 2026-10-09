@@ -35,6 +35,7 @@ func main() {
 	flag.BoolVar(&cfg.DryRun, "dryRun", false, "fetch and generate once without running as a service")
 	flag.StringVar(&logLevel, "logLevel", "info", "log level: none, error, warn, info, debug or a numeric level")
 	flag.DurationVar(&cfg.FetchTimeout, "fetch-timeout", 10*time.Second, "set fetch HTTP timeout")
+	flag.Uint64Var(&cfg.GeoFileMode, "geofile-mode", 0o644, "set mode of created geofile")
 
 	flag.Parse()
 

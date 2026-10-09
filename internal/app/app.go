@@ -30,6 +30,7 @@ type Config struct {
 	// Service config.
 	UpdateInterval time.Duration
 	GeoFile        string
+	GeoFileMode    uint64
 	PostCmd        string
 
 	// Geo config.
@@ -173,7 +174,7 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 				continue
 			}
 
-			if err := os.Chmod(tmpName, 0o400); err != nil {
+			if err := os.Chmod(tmpName, os.FileMode(cfg.GeoFileMode&0o777)); err != nil {
 				logger.Error("chmod temp file", "err", err)
 				os.Remove(tmpName)
 				continue
