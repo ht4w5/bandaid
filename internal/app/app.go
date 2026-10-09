@@ -32,7 +32,7 @@ type Config struct {
 	UpdateInterval time.Duration
 	GeoFile        string
 	GeoFileMode    string
-	PostCmd        string
+	PostExec       string
 
 	// Geo config.
 	VariableName        string
@@ -193,9 +193,11 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 				continue
 			}
 
-			logger.Debug("run post cmd", "cmd", cfg.PostCmd)
-			if err := execx.Run(ctx, cfg.PostCmd); err != nil {
-				logger.Warn("run post cmd", "err", err)
+			if cfg.PostExec != "" {
+				logger.Debug("run post cmd", "cmd", cfg.PostExec)
+				if err := execx.Run(ctx, cfg.PostExec); err != nil {
+					logger.Warn("run post cmd", "err", err)
+				}
 			}
 
 			lastHash = hash
