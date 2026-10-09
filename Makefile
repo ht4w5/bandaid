@@ -33,25 +33,8 @@ build:
 	@mkdir -p $(BIN_DIR)
 	$(GO) build $(BUILD_FLAGS) -o $(BIN) $(CMD)
 
-install:
-	$(GO) install $(BUILD_FLAGS) $(CMD)
-
 test:
 	$(GO) test -race -count=1 ./...
-
-fmt:
-	$(GO) fmt ./...
-
-vet:
-	$(GO) vet ./...
-
-info:
-	@echo "Version:     $(VERSION)"
-	@echo "Commit:      $(COMMIT)"
-	@echo "BuildDate:   $(BUILD_DATE)"
-	@echo "Dirty:       $(DIRTY)"
-	@echo "GoVersion:   $(shell $(GO) env GOVERSION)"
-	@echo "Platform:    $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)"
 
 clean:
 	rm -rf $(BIN_DIR)
