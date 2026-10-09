@@ -28,7 +28,7 @@ func main() {
 	flag.StringVar(&whitelistString, "whitelist", "", "whitelist targets delimited with commas")
 	flag.DurationVar(&cfg.UpdateInterval, "update-interval", time.Minute, "geo file update interval")
 	flag.StringVar(&cfg.GeoFile, "geofile", "", "generated geo file path")
-	flag.StringVar(&cfg.PostExec, "post-exec", "", "command to run after geo file update")
+	flag.StringVar(&cfg.PostExec, "post-exec", "", "command and args to run after geo file update (executed directly, not through a shell)")
 	flag.StringVar(&cfg.VariableName, "var-name", "$geo", "generated variable name")
 	flag.StringVar(&cfg.AddressVariableName, "addr-var-name", "", "generated address variable name")
 	flag.StringVar(&cfg.DefaultString, "default-str", "", "generated default string")
