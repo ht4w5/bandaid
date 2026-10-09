@@ -1,4 +1,4 @@
-package bd
+package report
 
 import (
 	"encoding/json/v2"
@@ -9,7 +9,7 @@ import (
 	"github.com/ht4w5/bd2geo/pkg/ipx"
 )
 
-func ParseReport(r io.Reader) (*model.Report, error) {
+func Parse(r io.Reader) (*model.Report, error) {
 	var wire struct {
 		Findings []struct {
 			Target  string   `json:"target"`
