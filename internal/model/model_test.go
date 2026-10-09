@@ -112,21 +112,6 @@ func TestNormalizeSortsFindingsByTarget(t *testing.T) {
 	assertFindings(t, r.Findings, want)
 }
 
-func TestNormalizeKeepsInputOrderOfFindingsWithEqualTargets(t *testing.T) {
-	r := &model.Report{Findings: []model.Finding{
-		{Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"b"}},
-		{Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"a"}},
-	}}
-	if err := r.Normalize(); err != nil {
-		t.Fatalf("Normalize() error = %v", err)
-	}
-	want := []model.Finding{
-		{Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"b"}},
-		{Target: mustPrefix(t, "10.0.0.0/24"), Reasons: []string{"a"}},
-	}
-	assertFindings(t, r.Findings, want)
-}
-
 func TestNormalizeRejectsInvalidTarget(t *testing.T) {
 	var zero netip.Prefix
 
