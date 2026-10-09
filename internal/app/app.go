@@ -123,85 +123,90 @@ func runService(ctx context.Context, cfg Config, f *report.Fetcher, g *geo.Gener
 		return fmt.Errorf("invalid geofile mode: %q: %w", cfg.GeoFileMode, err)
 	}
 
-	ticker := time.NewTicker(cfg.UpdateInterval)
-	defer ticker.Stop()
-
 	var lastHash uint32
+
+	update := func(now time.Time) {
+		logger.Info("begin report update", "time", now)
+
+		r, err := f.Fetch(ctx)
+		if err != nil {
+			logger.Error("fetch report", "err", err)
+			return
+		}
+
+		if err := r.Exclude(whitelist); err != nil {
+			logger.Error("exclude whitelist", "err", err)
+			return
+		}
+
+		if err := r.Normalize(); err != nil {
+			logger.Error("normalize report", "err", err)
+			return
+		}
+
+		hash := r.Hash()
+		if hash == lastHash {
+			logger.Info("report unchanged; skipping geo generation", "hash", fmt.Sprintf("%x", hash))
+			return
+		}
+
+		tmp, err := os.CreateTemp(filepath.Dir(cfg.GeoFile), "geofile-*")
+		if err != nil {
+			logger.Error("open temp file", "err", err)
+			return
+		}
+		tmpName := tmp.Name()
+
+		cleanup := func() {
+			tmp.Close()
+			os.Remove(tmpName)
+		}
+
+		if err := g.Generate(tmp, func() time.Time { return now }, r, hash); err != nil {
+			logger.Error("generate geo", "err", err)
+			cleanup()
+			return
+		}
+
+		if err := tmp.Close(); err != nil {
+			logger.Error("close temp file", "err", err)
+			os.Remove(tmpName)
+			return
+		}
+
+		if err := os.Chmod(tmpName, os.FileMode(mode&0o777)); err != nil {
+			logger.Error("chmod temp file", "err", err)
+			os.Remove(tmpName)
+			return
+		}
+
+		if err := os.Rename(tmpName, cfg.GeoFile); err != nil {
+			logger.Error("move geo file into place", "err", err)
+			os.Remove(tmpName)
+			return
+		}
+
+		if cfg.PostExec != "" {
+			logger.Debug("run post cmd", "cmd", cfg.PostExec)
+			if err := execx.Run(ctx, cfg.PostExec); err != nil {
+				logger.Warn("run post cmd", "err", err)
+			}
+		}
+
+		lastHash = hash
+		logger.Info("geo file updated", "file", cfg.GeoFile, "hash", fmt.Sprintf("%x", hash))
+	}
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case t := <-ticker.C:
-			logger.Info("begin report update", "time", t)
-
-			r, err := f.Fetch(ctx)
-			if err != nil {
-				logger.Error("fetch report", "err", err)
-				continue
-			}
-
-			if err := r.Exclude(whitelist); err != nil {
-				logger.Error("exclude whitelist", "err", err)
-				continue
-			}
-
-			if err := r.Normalize(); err != nil {
-				logger.Error("normalize report", "err", err)
-				continue
-			}
-
-			hash := r.Hash()
-			if hash == lastHash {
-				logger.Info("report unchanged; skipping geo generation", "hash", fmt.Sprintf("%x", hash))
-				continue
-			}
-
-			tmp, err := os.CreateTemp(filepath.Dir(cfg.GeoFile), "geofile-*")
-			if err != nil {
-				logger.Error("open temp file", "err", err)
-				continue
-			}
-			tmpName := tmp.Name()
-
-			cleanup := func() {
-				tmp.Close()
-				os.Remove(tmpName)
-			}
-
-			if err := g.Generate(tmp, func() time.Time { return t }, r, hash); err != nil {
-				logger.Error("generate geo", "err", err)
-				cleanup()
-				continue
-			}
-
-			if err := tmp.Close(); err != nil {
-				logger.Error("close temp file", "err", err)
-				os.Remove(tmpName)
-				continue
-			}
-
-			if err := os.Chmod(tmpName, os.FileMode(mode&0o777)); err != nil {
-				logger.Error("chmod temp file", "err", err)
-				os.Remove(tmpName)
-				continue
-			}
-
-			if err := os.Rename(tmpName, cfg.GeoFile); err != nil {
-				logger.Error("move geo file into place", "err", err)
-				os.Remove(tmpName)
-				continue
-			}
-
-			if cfg.PostExec != "" {
-				logger.Debug("run post cmd", "cmd", cfg.PostExec)
-				if err := execx.Run(ctx, cfg.PostExec); err != nil {
-					logger.Warn("run post cmd", "err", err)
-				}
-			}
-
-			lastHash = hash
-			logger.Info("geo file updated", "file", cfg.GeoFile, "hash", fmt.Sprintf("%x", hash))
+		case now := <-timer.C:
+			update(now)
+			timer.Reset(cfg.UpdateInterval)
 		}
 	}
 }
