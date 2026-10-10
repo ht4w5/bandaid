@@ -25,7 +25,7 @@ LDFLAGS     := -s -w \
 GOFLAGS     ?= -trimpath
 BUILD_FLAGS := $(GOFLAGS) -ldflags "$(LDFLAGS)"
 
-.PHONY: all build install clean fmt vet test info
+.PHONY: all build clean test
 
 all: build
 
